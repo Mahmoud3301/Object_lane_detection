@@ -1,0 +1,109 @@
+import os
+import numpy as np
+import cv2
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+# Define dataset paths
+path = "C:\\Users\\mahmo\\OneDrive\\Desktop\\project_graduation\\traffic_sign\\Data_sign\\myData"  # Folder containing class subfolders
+labelFile = "C:\\Users\\mahmo\\OneDrive\\Desktop\\project_graduation\\traffic_sign\\Data_sign\\labels.csv"  # CSV file with class names
+
+# Training parameters
+batch_size_val = 50
+epochs_val = 10
+imageDimensions = (32, 32, 3)
+
+# Load class folders
+classes = os.listdir(path)
+num_classes = len(classes)
+print(f"Total Classes Detected: {num_classes}")
+
+# Load images and labels
+images, labels = [], []
+for class_id, class_name in enumerate(classes):
+    class_path = os.path.join(path, class_name)
+    img_files = os.listdir(class_path)
+    for img_name in img_files:
+        img_path = os.path.join(class_path, img_name)
+        img = cv2.imread(img_path)
+        img = cv2.resize(img, (imageDimensions[0], imageDimensions[1]))
+        images.append(img)
+        labels.append(class_id)
+
+# Convert lists to arrays
+images = np.array(images)
+labels = np.array(labels)
+
+# Split dataset into Train (70%) / Validation (20%) / Test (10%) with stratified sampling
+X_train, X_temp, y_train, y_temp = train_test_split(images, labels, test_size=0.3, stratify=labels, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=1/3, stratify=y_temp, random_state=42)
+
+print(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}, Test samples: {len(X_test)}")
+
+# Normalize images (scaling pixel values between 0 and 1)
+X_train = X_train / 255.0
+X_val = X_val / 255.0
+X_test = X_test / 255.0
+
+# Data Augmentation
+datagen = ImageDataGenerator(
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    zoom_range=0.2,
+    fill_mode='nearest'
+)
+datagen.fit(X_train)
+
+# Optimized CNN Model
+model = Sequential([
+    Conv2D(64, (3, 3), activation='relu', padding='same', input_shape=imageDimensions),
+    BatchNormalization(),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Conv2D(128, (3, 3), activation='relu', padding='same'),
+    BatchNormalization(),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Conv2D(256, (3, 3), activation='relu', padding='same'),
+    BatchNormalization(),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Conv2D(512, (3, 3), activation='relu', padding='same'),
+    BatchNormalization(),
+    MaxPooling2D(pool_size=(2, 2)),
+
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dropout(0.5),
+    
+    Dense(256, activation='relu'),
+    Dropout(0.5),
+
+    Dense(num_classes, activation='softmax')
+])
+
+# Compile model
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Train model with validation data
+model.fit(datagen.flow(X_train, y_train, batch_size=batch_size_val), 
+          epochs=epochs_val, validation_data=(X_val, y_val))
+
+# Save model
+model.save("cell_classification_model.h5")
+print("Training complete. Model saved as cell_classification_model.h5.")
+
+# Evaluate model on test set
+y_pred = np.argmax(model.predict(X_test), axis=1)
+test_accuracy = accuracy_score(y_test, y_pred)
+print(f"Test Accuracy: {test_accuracy * 100:.2f}%")
+
+
+
+
